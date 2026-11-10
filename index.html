@@ -29,6 +29,15 @@
   .dot { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--muted); border-top-color: var(--accent); animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  /* ---- printer bluetooth (Web Bluetooth harus di halaman paling luar) ---- */
+  #pr { position: fixed; inset: 0; z-index: 10; display: grid; place-content: center; padding: 16px; background: rgba(0,0,0,.5); }
+  #pr[hidden] { display: none; }
+  #pr .box { background: #fff; color: #16252D; border-radius: 14px; padding: 20px; max-width: 360px; display: grid; gap: 12px; font-size: 15px; }
+  #pr h2 { margin: 0; font-size: 18px; }
+  #pr p { margin: 0; color: #5E6E77; font-size: 14px; }
+  #pr .err { color: #B42318; font-weight: 600; }
+  #pr button { font: inherit; font-weight: 700; border-radius: 10px; padding: 14px; border: 1px solid #DCE3E7; background: #fff; color: #16252D; }
+  #pr button.pri { background: #1F5C5C; border-color: #1F5C5C; color: #fff; font-size: 16px; }
 </style>
 </head>
 <body>
@@ -39,6 +48,13 @@
   <p id="slow" hidden>Belum muncul? <a id="direct" href="#" target="_top">Buka aplikasi langsung</a></p>
 </div>
 <iframe id="app" title="Neyma Backoffice" allow="clipboard-write"></iframe>
+<div id="pr" hidden role="dialog" aria-modal="true" aria-labelledby="prT"><div class="box">
+  <h2 id="prT">&#128424; Printer bluetooth</h2>
+  <p id="prMsg">Hubungkan printer nota. Pastikan printer menyala dan Bluetooth HP aktif.</p>
+  <p id="prErr" class="err" hidden></p>
+  <button class="pri" id="prGo">Pilih printer</button>
+  <button id="prNo">Batal</button>
+</div></div>
 <script>
   // GANTI link di bawah ini kalau link /exec Google Apps Script Anda berubah.
   var APP_URL = "https://script.google.com/macros/s/AKfycby7qhw03mAseY03pkLd1jDg5CJ4tmalItKLaRt8718iw6oKaS_icV_vr6F2jIZZtk-8/exec";
@@ -47,6 +63,88 @@
   f.addEventListener("load", function () { w.style.opacity = "0"; setTimeout(function () { w.hidden = true; }, 300); });
   setTimeout(function () { document.getElementById("slow").hidden = false; }, 8000);
   f.src = APP_URL;
+
+  /* ===== PRINTER BLUETOOTH (Web Bluetooth, Chrome Android) =====
+   * Aplikasi di dalam bingkai mengirim nota (ESC/POS, base64) lewat postMessage; halaman ini yang menyambung ke printer.
+   * Printer thermal BLE memakai salah satu service di bawah; dicari karakteristik yang bisa ditulis. */
+  var SVC = ["000018f0-0000-1000-8000-00805f9b34fb", "0000ff00-0000-1000-8000-00805f9b34fb", "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
+    "49535343-fe7d-4ae5-8fa9-9fafd205e455", "0000ffe0-0000-1000-8000-00805f9b34fb", "0000fee7-0000-1000-8000-00805f9b34fb",
+    "0000ae30-0000-1000-8000-00805f9b34fb", "0000ae3a-0000-1000-8000-00805f9b34fb", "0000ff12-0000-1000-8000-00805f9b34fb",
+    "0000fff0-0000-1000-8000-00805f9b34fb", "0000ffb0-0000-1000-8000-00805f9b34fb", "0000ae00-0000-1000-8000-00805f9b34fb"];
+  var bt = navigator.bluetooth, dev = null, chr = null, app = null, appOrigin = null, pending = null;
+  var pr = document.getElementById("pr"), prMsg = document.getElementById("prMsg"), prErr = document.getElementById("prErr"), prGo = document.getElementById("prGo");
+  function okOrigin(o) { return o === "https://script.google.com" || /^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(o); }
+  function send(m) { if (app && appOrigin) app.postMessage(m, appOrigin); }
+  function connected() { return !!(dev && chr && dev.gatt && dev.gatt.connected); }
+  function status() { send({ neyma: "printer", supported: !!bt, connected: connected(), name: dev ? (dev.name || "Printer") : "" }); }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  async function findChar(server) {
+    var list = await server.getPrimaryServices(), best = null;
+    for (var i = 0; i < list.length; i++) {
+      var cs = await list[i].getCharacteristics();
+      for (var j = 0; j < cs.length; j++) { var p = cs[j].properties; if (p.writeWithoutResponse || p.write) { if (!best || (p.writeWithoutResponse && !best.properties.writeWithoutResponse)) best = cs[j]; } }
+    }
+    if (!best) throw new Error("Printer tersambung, tapi jalur cetaknya tidak ditemukan. Printer ini mungkin tidak mendukung Bluetooth LE.");
+    return best;
+  }
+  async function attach(d) {
+    if (dev !== d) { dev = d; d.addEventListener("gattserverdisconnected", function () { chr = null; status(); }); }
+    var server = await d.gatt.connect(); chr = await findChar(server);
+    try { localStorage.setItem("neyma_printer", d.id); } catch (e) { }
+    status();
+  }
+  async function ensure() {
+    if (connected()) return;
+    if (dev) { await attach(dev); return; }
+    if (bt && bt.getDevices) {
+      var ds = await bt.getDevices(), id = null; try { id = localStorage.getItem("neyma_printer"); } catch (e) { }
+      var d = ds.filter(function (x) { return x.id === id; })[0] || (ds.length === 1 ? ds[0] : null);
+      if (d) { await attach(d); return; }
+    }
+    throw new Error("PILIH");
+  }
+  async function write(bytes) {
+    var noResp = chr.properties.writeWithoutResponse, size = 20; // aman untuk semua printer (MTU minimum)
+    for (var i = 0; i < bytes.length; i += size) {
+      var part = bytes.slice(i, i + size);
+      if (noResp && chr.writeValueWithoutResponse) { await chr.writeValueWithoutResponse(part); await sleep(12); }
+      else if (chr.writeValueWithResponse) await chr.writeValueWithResponse(part);
+      else await chr.writeValue(part);
+    }
+  }
+  function bytesOf(b64) { var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  async function doPrint(job) {
+    await ensure(); await write(bytesOf(job.b64)); send({ neyma: "printed", ok: true, id: job.id }); status();
+  }
+  function ask(job, err) {
+    pending = job; prErr.hidden = !err; prErr.textContent = err || "";
+    prMsg.textContent = job ? "Printer belum tersambung. Tekan \"Pilih printer\", pilih nama printer Anda, lalu nota langsung dicetak." : "Hubungkan printer nota. Pastikan printer menyala dan Bluetooth HP aktif.";
+    prGo.textContent = dev ? "Sambungkan lagi / pilih printer" : "Pilih printer"; pr.hidden = false;
+  }
+  prGo.onclick = async function () {
+    prErr.hidden = true; prGo.disabled = true;
+    try {
+      if (!bt) throw new Error("Browser ini tidak mendukung printer bluetooth. Pakai Google Chrome di HP Android.");
+      var d = await bt.requestDevice({ acceptAllDevices: true, optionalServices: SVC });
+      prMsg.textContent = "Menyambungkan ke " + (d.name || "printer") + "..."; await attach(d);
+      pr.hidden = true;
+      if (pending) { var j = pending; pending = null; await doPrint(j); }
+    } catch (e) {
+      if (e && e.name === "NotFoundError") { prErr.hidden = true; } else { prErr.textContent = (e && e.message) || String(e); prErr.hidden = false; }
+    } finally { prGo.disabled = false; }
+  };
+  document.getElementById("prNo").onclick = function () { pr.hidden = true; if (pending) { send({ neyma: "printed", ok: false, id: pending.id, err: "Print dibatalkan" }); pending = null; } };
+  window.addEventListener("message", async function (e) {
+    var m = e.data; if (!m || typeof m !== "object" || !m.neyma || !okOrigin(e.origin)) return;
+    app = e.source; appOrigin = e.origin;
+    if (m.neyma === "hello") { status(); if (bt && bt.getDevices && !connected()) { try { await ensure(); } catch (x) { } } return; }
+    if (m.neyma === "connect") { ask(null); return; }
+    if (m.neyma === "print") {
+      if (!bt) { send({ neyma: "printed", ok: false, id: m.id, err: "NOBT" }); return; }
+      try { await doPrint(m); }
+      catch (x) { if (x && x.message === "PILIH") ask(m); else { chr = null; ask(m, "Gagal mencetak: " + ((x && x.message) || x) + ". Coba sambungkan lagi."); } }
+    }
+  });
 </script>
 </body>
 </html>
