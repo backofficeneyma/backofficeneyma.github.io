@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neyma Backoffice</title>
+<meta name="description" content="Backoffice Neyma: login karyawan untuk kasir (POS), komisi terapis, kas harian dan laporan.">
+<link rel="canonical" href="https://backofficeneyma.github.io/">
+<meta property="og:title" content="Neyma Backoffice">
+<meta property="og:description" content="Login karyawan Neyma.">
+<meta property="og:url" content="https://backofficeneyma.github.io/">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#173A3E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Neyma">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23173A3E'/%3E%3Ctext x='32' y='42' font-family='Arial' font-size='28' font-weight='700' fill='%23fff' text-anchor='middle'%3EN%3C/text%3E%3C/svg%3E">
+<style>
+  /* Halaman ini hanya "bingkai": aplikasi aslinya tetap di Google Apps Script. */
+  :root { --bg: #F1F4F6; --ink: #16252D; --muted: #5E6E77; --accent: #1F5C5C; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0E1716; --ink: #E3EEEB; --muted: #99AFAA; --accent: #62B6AA; } }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
+  #wait { position: fixed; inset: 0; display: grid; place-content: center; gap: 12px; text-align: center; padding: 16px; background: var(--bg); transition: opacity .3s; }
+  #wait b { font-size: 18px; }
+  #wait p { margin: 0; color: var(--muted); font-size: 14px; max-width: 34ch; }
+  #wait a { color: var(--accent); font-weight: 600; }
+  .dot { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--muted); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+</style>
+</head>
+<body>
+<div id="wait" role="status">
+  <div class="dot" aria-hidden="true"></div>
+  <b>Neyma Backoffice</b>
+  <p>Memuat aplikasi...</p>
+  <p id="slow" hidden>Belum muncul? <a id="direct" href="#" target="_top">Buka aplikasi langsung</a></p>
+</div>
+<iframe id="app" title="Neyma Backoffice" allow="clipboard-write"></iframe>
+<script>
+  // GANTI link di bawah ini kalau link /exec Google Apps Script Anda berubah.
+  var APP_URL = "https://script.google.com/macros/s/AKfycby7qhw03mAseY03pkLd1jDg5CJ4tmalItKLaRt8718iw6oKaS_icV_vr6F2jIZZtk-8/exec";
+  var f = document.getElementById("app"), w = document.getElementById("wait");
+  document.getElementById("direct").href = APP_URL;
+  f.addEventListener("load", function () { w.style.opacity = "0"; setTimeout(function () { w.hidden = true; }, 300); });
+  setTimeout(function () { document.getElementById("slow").hidden = false; }, 8000);
+  f.src = APP_URL;
+</script>
+</body>
+</html>
