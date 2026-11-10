@@ -53,6 +53,7 @@
   <p id="prMsg">Hubungkan printer nota. Pastikan printer menyala dan Bluetooth HP aktif.</p>
   <p id="prErr" class="err" hidden></p>
   <button class="pri" id="prGo">Pilih printer</button>
+  <button id="prAll" hidden>Printer tidak ada di daftar? Tampilkan semua perangkat</button>
   <button id="prNo">Batal</button>
 </div></div>
 <script>
@@ -71,6 +72,10 @@
     "49535343-fe7d-4ae5-8fa9-9fafd205e455", "0000ffe0-0000-1000-8000-00805f9b34fb", "0000fee7-0000-1000-8000-00805f9b34fb",
     "0000ae30-0000-1000-8000-00805f9b34fb", "0000ae3a-0000-1000-8000-00805f9b34fb", "0000ff12-0000-1000-8000-00805f9b34fb",
     "0000fff0-0000-1000-8000-00805f9b34fb", "0000ffb0-0000-1000-8000-00805f9b34fb", "0000ae00-0000-1000-8000-00805f9b34fb"];
+  /* Daftar pilihan hanya menampilkan printer: yang mengiklankan service printer, atau namanya seperti printer thermal umum. */
+  var NAMES = ["Printer", "PRINTER", "printer", "BlueTooth Printer", "BT Printer", "POS", "Pos", "RPP", "MTP", "MPT", "PT-", "PT2", "PT8", "P58", "P80", "58", "80",
+    "XP-", "XP", "ZJ", "GOOJPRT", "EPPOS", "EP5", "Panda", "PANDA", "Thermal", "MP", "RP", "Inner", "InnerPrinter", "IposPrinter", "HM-", "HOIN", "ZCS", "Xprinter", "Zjiang", "SPRT", "QS", "YHD", "BlueTooth", "Bluetooth Printer"];
+  var FILTERS = SVC.map(function (u) { return { services: [u] }; }).concat(NAMES.map(function (n) { return { namePrefix: n }; }));
   var bt = navigator.bluetooth, dev = null, chr = null, app = null, appOrigin = null, pending = null;
   var pr = document.getElementById("pr"), prMsg = document.getElementById("prMsg"), prErr = document.getElementById("prErr"), prGo = document.getElementById("prGo");
   function okOrigin(o) { return o === "https://script.google.com" || /^https:\/\/[a-z0-9-]+-script\.googleusercontent\.com$/.test(o); }
@@ -119,20 +124,23 @@
   function ask(job, err) {
     pending = job; prErr.hidden = !err; prErr.textContent = err || "";
     prMsg.textContent = job ? "Printer belum tersambung. Tekan \"Pilih printer\", pilih nama printer Anda, lalu nota langsung dicetak." : "Hubungkan printer nota. Pastikan printer menyala dan Bluetooth HP aktif.";
-    prGo.textContent = dev ? "Sambungkan lagi / pilih printer" : "Pilih printer"; pr.hidden = false;
+    prGo.textContent = dev ? "Sambungkan lagi / pilih printer" : "Pilih printer"; prAll.hidden = true; pr.hidden = false;
   }
-  prGo.onclick = async function () {
-    prErr.hidden = true; prGo.disabled = true;
+  var prAll = document.getElementById("prAll");
+  prAll.onclick = function () { choose(true); };
+  prGo.onclick = function () { choose(false); };
+  async function choose(all) {
+    prErr.hidden = true; prGo.disabled = true; prAll.disabled = true;
     try {
       if (!bt) throw new Error("Browser ini tidak mendukung printer bluetooth. Pakai Google Chrome di HP Android.");
-      var d = await bt.requestDevice({ acceptAllDevices: true, optionalServices: SVC });
+      var d = await bt.requestDevice(all ? { acceptAllDevices: true, optionalServices: SVC } : { filters: FILTERS, optionalServices: SVC });
       prMsg.textContent = "Menyambungkan ke " + (d.name || "printer") + "..."; await attach(d);
       pr.hidden = true;
       if (pending) { var j = pending; pending = null; await doPrint(j); }
     } catch (e) {
-      if (e && e.name === "NotFoundError") { prErr.hidden = true; } else { prErr.textContent = (e && e.message) || String(e); prErr.hidden = false; }
-    } finally { prGo.disabled = false; }
-  };
+      if (e && e.name === "NotFoundError") { prErr.hidden = true; prAll.hidden = false; } else { prErr.textContent = (e && e.message) || String(e); prErr.hidden = false; prAll.hidden = false; }
+    } finally { prGo.disabled = false; prAll.disabled = false; }
+  }
   document.getElementById("prNo").onclick = function () { pr.hidden = true; if (pending) { send({ neyma: "printed", ok: false, id: pending.id, err: "Print dibatalkan" }); pending = null; } };
   window.addEventListener("message", async function (e) {
     var m = e.data; if (!m || typeof m !== "object" || !m.neyma || !okOrigin(e.origin)) return;
