@@ -33,13 +33,14 @@
   @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
   /* ---- printer bluetooth (Web Bluetooth harus di halaman paling luar) ---- */
   #pr { position: fixed; inset: 0; z-index: 10; display: grid; place-content: center; padding: 16px; background: rgba(0,0,0,.5); }
-  #pr[hidden] { display: none; }
-  #pr .box { background: #fff; color: #16252D; border-radius: 14px; padding: 20px; max-width: 360px; display: grid; gap: 12px; font-size: 15px; }
-  #pr h2 { margin: 0; font-size: 18px; }
-  #pr p { margin: 0; color: #5E6E77; font-size: 14px; }
-  #pr .err { color: #B42318; font-weight: 600; }
-  #pr button { font: inherit; font-weight: 700; border-radius: 10px; padding: 14px; border: 1px solid #DCE3E7; background: #fff; color: #16252D; }
-  #pr button.pri { background: #1F5C5C; border-color: #1F5C5C; color: #fff; font-size: 16px; }
+  #pr[hidden], #sh[hidden] { display: none; }
+  #sh { position: fixed; inset: 0; z-index: 11; display: grid; place-content: center; padding: 16px; background: rgba(0,0,0,.5); }
+  #pr .box, #sh .box { background: #fff; color: #16252D; border-radius: 14px; padding: 20px; max-width: 360px; display: grid; gap: 12px; font-size: 15px; }
+  #pr h2, #sh h2 { margin: 0; font-size: 18px; }
+  #pr p, #sh p { margin: 0; color: #5E6E77; font-size: 14px; }
+  #pr .err, #sh .err { color: #B42318; font-weight: 600; }
+  #pr button, #sh button { font: inherit; font-weight: 700; border-radius: 10px; padding: 14px; border: 1px solid #DCE3E7; background: #fff; color: #16252D; }
+  #pr button.pri, #sh button.pri { background: #1F5C5C; border-color: #1F5C5C; color: #fff; font-size: 16px; }
 </style>
 </head>
 <body>
@@ -50,6 +51,13 @@
   <p id="slow" hidden>Belum muncul? <a id="direct" href="#" target="_top">Buka aplikasi langsung</a></p>
 </div>
 <iframe id="app" title="Neyma Backoffice" allow="clipboard-write"></iframe>
+<div id="sh" hidden role="dialog" aria-modal="true" aria-labelledby="shT" class="ovl"><div class="box">
+  <h2 id="shT">&#128196; Kirim invoice PDF</h2>
+  <p>Tekan tombol di bawah, pilih <b>WhatsApp</b>, lalu pilih chat customer.</p>
+  <p id="shErr" class="err" hidden></p>
+  <button class="pri" id="shGo">Bagikan PDF</button>
+  <button id="shNo">Batal</button>
+</div></div>
 <div id="pr" hidden role="dialog" aria-modal="true" aria-labelledby="prT"><div class="box">
   <h2 id="prT">&#128424; Printer bluetooth</h2>
   <p id="prMsg">Hubungkan printer nota. Pastikan printer menyala dan Bluetooth HP aktif.</p>
@@ -172,6 +180,20 @@
   prAll.onclick = function () { choose(true); };
   prGo.onclick = function () { choose(false); };
   document.getElementById("prNo").onclick = function () { pr.hidden = true; if (pending) { send({ neyma: "printed", ok: false, id: pending.id, err: "Print dibatalkan" }); pending = null; } };
+  /* ===== BAGIKAN FILE PDF (menu Bagikan Android -> WhatsApp) ===== */
+  var shJob = null, sh = document.getElementById("sh"), shErr = document.getElementById("shErr");
+  function pdfFile(m) { return new File([bytesOf(m.b64)], m.name || "Invoice.pdf", { type: "application/pdf" }); }
+  async function sharePdf(m) {
+    var f = pdfFile(m), data = { files: [f], text: m.text || "", title: m.name || "Invoice" };
+    if (!navigator.share || !navigator.canShare || !navigator.canShare({ files: [f] })) { send({ neyma: "shared", ok: false, id: m.id, err: "NOSHARE" }); return; }
+    try { await navigator.share(data); send({ neyma: "shared", ok: true, id: m.id }); sh.hidden = true; shJob = null; }
+    catch (x) {
+      if (x && x.name === "AbortError") { send({ neyma: "shared", ok: false, id: m.id, err: "Dibatalkan" }); sh.hidden = true; shJob = null; return; }
+      shJob = m; shErr.hidden = !(x && x.name !== "NotAllowedError"); shErr.textContent = (x && x.message) || ""; sh.hidden = false; // perlu ketukan baru
+    }
+  }
+  document.getElementById("shGo").onclick = function () { if (shJob) sharePdf(shJob); };
+  document.getElementById("shNo").onclick = function () { sh.hidden = true; if (shJob) send({ neyma: "shared", ok: false, id: shJob.id, err: "Dibatalkan" }); shJob = null; };
   window.addEventListener("message", async function (e) {
     var m = e.data; if (!m || typeof m !== "object" || !m.neyma || !okOrigin(e.origin)) return;
     app = e.source; appOrigin = e.origin;
@@ -181,6 +203,7 @@
     if (m.neyma === "disconnect") { manualOff = true; try { if (dev && dev.gatt.connected) dev.gatt.disconnect(); } catch (x) { } chr = null; state = "off"; status(); return; }
     if (m.neyma === "forget") { manualOff = true; try { if (dev && dev.gatt.connected) dev.gatt.disconnect(); if (dev && dev.forget) await dev.forget(); } catch (x) { } dev = null; chr = null; state = "off"; try { localStorage.removeItem("neyma_printer"); } catch (x) { } status(); return; }
     if (m.neyma === "install") { if (installEvt) { try { installEvt.prompt(); var c = await installEvt.userChoice; if (c && c.outcome === "accepted") installEvt = null; } catch (x) { } } status(); return; }
+    if (m.neyma === "share") { sharePdf(m); return; }
     if (m.neyma === "print") {
       if (!bt) { send({ neyma: "printed", ok: false, id: m.id, err: "NOBT" }); return; }
       try { await doPrint(m); }
