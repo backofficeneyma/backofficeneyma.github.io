@@ -53,10 +53,12 @@
 <iframe id="app" title="Neyma Backoffice" allow="clipboard-write"></iframe>
 <div id="sh" hidden role="dialog" aria-modal="true" aria-labelledby="shT" class="ovl"><div class="box">
   <h2 id="shT">&#128196; Kirim invoice PDF</h2>
-  <p>Tekan tombol di bawah, pilih <b>WhatsApp</b>, lalu pilih chat customer.</p>
+  <p id="shName"></p>
+  <p>Tekan <b>Bagikan PDF</b>, pilih <b>WhatsApp</b>, lalu pilih chat customer.</p>
   <p id="shErr" class="err" hidden></p>
   <button class="pri" id="shGo">Bagikan PDF</button>
-  <button id="shNo">Batal</button>
+  <button id="shDl">Unduh PDF</button>
+  <button id="shNo">Tutup</button>
 </div></div>
 <div id="pr" hidden role="dialog" aria-modal="true" aria-labelledby="prT"><div class="box">
   <h2 id="prT">&#128424; Printer bluetooth</h2>
@@ -183,17 +185,25 @@
   /* ===== BAGIKAN FILE PDF (menu Bagikan Android -> WhatsApp) ===== */
   var shJob = null, sh = document.getElementById("sh"), shErr = document.getElementById("shErr");
   function pdfFile(m) { return new File([bytesOf(m.b64)], m.name || "Invoice.pdf", { type: "application/pdf" }); }
-  async function sharePdf(m) {
-    var f = pdfFile(m), data = { files: [f], text: m.text || "", title: m.name || "Invoice" };
-    if (!navigator.share || !navigator.canShare || !navigator.canShare({ files: [f] })) { send({ neyma: "shared", ok: false, id: m.id, err: "NOSHARE" }); return; }
-    try { await navigator.share(data); send({ neyma: "shared", ok: true, id: m.id }); sh.hidden = true; shJob = null; }
-    catch (x) {
-      if (x && x.name === "AbortError") { send({ neyma: "shared", ok: false, id: m.id, err: "Dibatalkan" }); sh.hidden = true; shJob = null; return; }
-      shJob = m; shErr.hidden = !(x && x.name !== "NotAllowedError"); shErr.textContent = (x && x.message) || ""; sh.hidden = false; // perlu ketukan baru
-    }
+  /* Kotak "Bagikan PDF" selalu ditampilkan di halaman ini, supaya ketukan kasir langsung diterima Chrome
+   * (perintah dari dalam bingkai aplikasi kadang ditolak). */
+  function sharePdf(m) {
+    shJob = m; shErr.hidden = true; document.getElementById("shName").textContent = m.name || "Invoice.pdf";
+    var f = pdfFile(m), can = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [f] }));
+    document.getElementById("shGo").hidden = !can;
+    if (!can) { shErr.textContent = "Browser ini tidak bisa membagikan file. Tekan Unduh PDF, lalu kirim file dari folder Download lewat WhatsApp. (Paling lancar: Google Chrome di Android.)"; shErr.hidden = false; }
+    sh.hidden = false;
   }
-  document.getElementById("shGo").onclick = function () { if (shJob) sharePdf(shJob); };
-  document.getElementById("shNo").onclick = function () { sh.hidden = true; if (shJob) send({ neyma: "shared", ok: false, id: shJob.id, err: "Dibatalkan" }); shJob = null; };
+  document.getElementById("shGo").onclick = async function () {
+    if (!shJob) return; var m = shJob;
+    try { await navigator.share({ files: [pdfFile(m)], title: m.name || "Invoice" }); send({ neyma: "shared", ok: true, id: m.id }); sh.hidden = true; shJob = null; }
+    catch (x) { if (x && x.name === "AbortError") return; shErr.textContent = "Gagal membagikan (" + ((x && x.name) || "") + ": " + ((x && x.message) || x) + "). Coba Unduh PDF."; shErr.hidden = false; }
+  };
+  document.getElementById("shDl").onclick = function () {
+    if (!shJob) return; var a = document.createElement("a"); a.href = URL.createObjectURL(pdfFile(shJob)); a.download = shJob.name || "Invoice.pdf";
+    document.body.appendChild(a); a.click(); a.remove(); send({ neyma: "shared", ok: true, id: shJob.id, dl: true });
+  };
+  document.getElementById("shNo").onclick = function () { sh.hidden = true; shJob = null; };
   window.addEventListener("message", async function (e) {
     var m = e.data; if (!m || typeof m !== "object" || !m.neyma || !okOrigin(e.origin)) return;
     app = e.source; appOrigin = e.origin;
