@@ -25,7 +25,7 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
   /* ---- loading: intro gaya Pixar. Titik "." melompat, setiap huruf NEY.MA tumbuh & mengangkat titik, lalu WELLNESS diketik ---- */
-  #wait { position: fixed; inset: 0; z-index: 5; background: #fff; display: grid; place-content: center; justify-items: center; gap: 20px; transition: opacity .5s; }
+  #wait { position: fixed; inset: 0; z-index: 5; background: #fff; display: grid; place-content: center; justify-items: center; gap: 20px; transition: opacity .3s; }
   #wait.out { opacity: 0; pointer-events: none; }
   #wait[hidden] { display: none; }
   #nm { width: min(80vw, 350px); height: auto; overflow: visible; }
@@ -88,8 +88,8 @@
   var f = document.getElementById("app"), w = document.getElementById("wait");
   document.getElementById("direct").href = APP_URL;
   /* Intro penuh pada pembukaan pertama setiap hari; berikutnya versi cepat. Hilang setelah intro selesai DAN aplikasi siap. */
-  var today = new Date().toDateString(), SPEED = 1;
-  try { if (localStorage.getItem("neyma_intro") === today) SPEED = 2.8; else localStorage.setItem("neyma_intro", today); } catch (e) { }
+  var today = new Date().toDateString(), SPEED = 1.8, TA = 0, LAST = null;
+  try { if (localStorage.getItem("neyma_intro") === today) SPEED = 3.5; else localStorage.setItem("neyma_intro", today); } catch (e) { }
   if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) SPEED = 6;
   var ball = document.getElementById("ball"), G = 172, LET = [0, 1, 2, 3, 4].map(function (i) { return document.getElementById("L" + i); });
   var LX = [40, 125, 214, 380, 502], DOT = 282;
@@ -109,7 +109,7 @@
   var intro = landDot + .2, wellAt = landDot + .15, ready = false, finished = false, T0 = null;
   function grow(d) { return d <= 0 ? 0 : spring(Math.min(1, d / .9)); }
   function frame(now) {
-    if (T0 === null) T0 = now; var t = (now - T0) / 1000 * SPEED, x = -40, y = G, sx = 1, sy = 1, r = 8;
+    if (LAST === null) LAST = now; TA += (now - LAST) / 1000 * (ready ? Math.max(SPEED, 7) : SPEED); LAST = now; var t = TA, x = -40, y = G, sx = 1, sy = 1, r = 8;
     for (var k = 0; k < seq.length; k++) { var s = seq[k]; if (t < s.t) break;
       var q = Math.min(1, (t - s.t) / s.d);
       if (s.type === "hop") { x = s.x0 + (s.x1 - s.x0) * ease(q); var top = Math.min(s.y0, s.y1) - s.h; y = (1 - q) * (1 - q) * s.y0 + 2 * (1 - q) * q * (top - (s.y0 + s.y1) / 2 + top) / 1 * .5 + q * q * s.y1;
@@ -124,8 +124,8 @@
       g.style.opacity = 1; g.style.transform = "scale(" + (1 + .2 * (1 - s)) + "," + Math.max(.02, s) + ") rotate(" + (6 * (1 - s) * (i % 2 ? -1 : 1)) + "deg)";
       [].forEach.call(g.querySelectorAll("path"), function (p, n) { var kn = Math.max(0, Math.min(1, (d - n * .08) / .45)); p.style.strokeDashoffset = p._L * (1 - back(kn)); }); });
     if (t >= wellAt) { var n = Math.min(8, Math.floor((t - wellAt) / .07) + 1); document.getElementById("well").textContent = "WELLNESS".slice(0, n); if (n === 8) document.getElementById("ldg").classList.add("on"); }
-    if (t > intro + .8) finished = true;
-    if (finished && ready) { document.getElementById("ldg").classList.remove("on"); document.getElementById("ldg").style.opacity = 0; w.classList.add("out"); setTimeout(function () { w.hidden = true; }, 600); return; }
+    if (t > intro + .15) finished = true;
+    if (finished && ready) { document.getElementById("ldg").classList.remove("on"); document.getElementById("ldg").style.opacity = 0; w.classList.add("out"); setTimeout(function () { w.hidden = true; }, 350); return; }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
