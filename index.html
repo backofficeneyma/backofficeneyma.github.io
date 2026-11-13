@@ -24,13 +24,20 @@
   html { touch-action: manipulation; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
-  #wait { position: fixed; inset: 0; display: grid; place-content: center; gap: 12px; text-align: center; padding: 16px; background: var(--bg); transition: opacity .3s; }
-  #wait b { font-size: 18px; }
-  #wait p { margin: 0; color: var(--muted); font-size: 14px; max-width: 34ch; }
-  #wait a { color: var(--accent); font-weight: 600; }
-  .dot { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 3px solid var(--muted); border-top-color: var(--accent); animation: spin 1s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+  /* ---- loading: intro gaya Pixar. Titik "." melompat, setiap huruf NEY.MA tumbuh & mengangkat titik, lalu WELLNESS diketik ---- */
+  #wait { position: fixed; inset: 0; z-index: 5; background: #fff; display: grid; place-content: center; justify-items: center; gap: 20px; transition: opacity .5s; }
+  #wait.out { opacity: 0; pointer-events: none; }
+  #wait[hidden] { display: none; }
+  #nm { width: min(80vw, 350px); height: auto; overflow: visible; }
+  #nm path { fill: none; stroke: #111; stroke-width: 16; stroke-linecap: round; stroke-linejoin: round; }
+  #nm .lt { transform-box: fill-box; transform-origin: 50% 100%; }
+  #ball { fill: #111; }
+  .well { font: 700 13px/1 "Helvetica Neue", Arial, sans-serif; letter-spacing: .82em; margin-right: -.82em; color: #111; height: 13px; white-space: pre; }
+  .ldg { font: 600 10px/1 "Helvetica Neue", Arial, sans-serif; letter-spacing: .4em; margin-right: -.4em; color: #111; opacity: 0; transition: opacity .4s; }
+  .ldg.on { animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 0%, 100% { opacity: .45; } 50% { opacity: .12; } }
+  #slow { position: absolute; left: 16px; right: 16px; bottom: calc(24px + env(safe-area-inset-bottom)); margin: 0; text-align: center; font-size: 14px; color: #5E6E77; }
+  #slow a { color: #111; font-weight: 700; }
   /* ---- printer bluetooth (Web Bluetooth harus di halaman paling luar) ---- */
   #pr { position: fixed; inset: 0; z-index: 10; display: grid; place-content: center; padding: 16px; background: rgba(0,0,0,.5); }
   #pr[hidden], #sh[hidden] { display: none; }
@@ -44,10 +51,17 @@
 </style>
 </head>
 <body>
-<div id="wait" role="status">
-  <img src="logo.png" alt="NEY.MA Wellness" style="width:min(260px,70vw);height:auto;margin:0 auto 8px">
-  <div class="dot" aria-hidden="true"></div>
-  <p>Memuat aplikasi...</p>
+<div id="wait" role="status" aria-label="Memuat aplikasi">
+  <svg id="nm" viewBox="-14 -60 568 262" aria-label="NEY.MA">
+    <g class="lt" id="L0"><path d="M10,180 V50 A30,30 0 0 1 70,50 V180"/></g>
+    <g class="lt" id="L1"><path d="M100,105 H146"/><path d="M150,38 A30,30 0 0 0 100,58 V152 A30,30 0 0 0 150,172"/></g>
+    <g class="lt" id="L2"><path d="M214,180 V140"/><path d="M184,20 V110 A30,30 0 0 0 244,110 V20"/></g>
+    <g class="lt" id="L3"><path d="M320,180 V50 A30,30 0 0 1 380,50 A30,30 0 0 1 440,50 V180"/><path d="M380,180 V50"/></g>
+    <g class="lt" id="L4"><path d="M472,180 V50 A30,30 0 0 1 532,50 V180"/><path d="M472,112 H532"/></g>
+    <ellipse id="ball" cx="-40" cy="172" rx="8" ry="8"/>
+  </svg>
+  <div class="well" id="well"></div>
+  <div class="ldg" id="ldg">LOADING</div>
   <p id="slow" hidden>Belum muncul? <a id="direct" href="#" target="_top">Buka aplikasi langsung</a></p>
 </div>
 <iframe id="app" title="Neyma Backoffice" allow="clipboard-write"></iframe>
@@ -73,8 +87,52 @@
   var APP_URL = "https://script.google.com/macros/s/AKfycby7qhw03mAseY03pkLd1jDg5CJ4tmalItKLaRt8718iw6oKaS_icV_vr6F2jIZZtk-8/exec";
   var f = document.getElementById("app"), w = document.getElementById("wait");
   document.getElementById("direct").href = APP_URL;
-  f.addEventListener("load", function () { w.style.opacity = "0"; setTimeout(function () { w.hidden = true; }, 300); });
-  setTimeout(function () { document.getElementById("slow").hidden = false; }, 8000);
+  /* Intro penuh pada pembukaan pertama setiap hari; berikutnya versi cepat. Hilang setelah intro selesai DAN aplikasi siap. */
+  var today = new Date().toDateString(), SPEED = 1;
+  try { if (localStorage.getItem("neyma_intro") === today) SPEED = 2.8; else localStorage.setItem("neyma_intro", today); } catch (e) { }
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) SPEED = 6;
+  var ball = document.getElementById("ball"), G = 172, LET = [0, 1, 2, 3, 4].map(function (i) { return document.getElementById("L" + i); });
+  var LX = [40, 125, 214, 380, 502], DOT = 282;
+  LET.forEach(function (g) { g.style.opacity = 0; [].forEach.call(g.querySelectorAll("path"), function (p) { var L = Math.ceil(p.getTotalLength()) + 2; p.style.strokeDasharray = L + " " + L; p.style.strokeDashoffset = L; p._L = L; }); });
+  function ease(t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function back(t) { var c = 1.9; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); }
+  function spring(t) { return 1 - Math.exp(-6 * t) * Math.cos(11 * t); }
+  /* lompatan: [mulai, durasi, dariX, keX, tinggi] */
+  /* Alur: titik jatuh di tempat huruf -> huruf tumbuh dari bawah & mengangkat titik ke atasnya -> titik melompat ke huruf
+   * berikutnya. Setelah huruf A, titik melompat turun ke tempatnya (titik di NEY.MA). */
+  var TOP = [4, 20, 4, 4, 4], seq = [], tc = 0, px = -40, py = G;
+  for (var i = 0; i < 5; i++) {
+    seq.push({ type: "hop", t: tc, d: i ? .34 : .44, x0: px, y0: py, x1: LX[i], y1: G, h: i ? 46 : 60 }); tc += i ? .34 : .44;
+    seq.push({ type: "ride", t: tc, d: .3, i: i }); LET[i]._t = tc; tc += .3; px = LX[i]; py = TOP[i];
+  }
+  seq.push({ type: "hop", t: tc, d: .58, x0: px, y0: py, x1: DOT, y1: G, h: 70, last: true }); var landDot = tc + .58;
+  var intro = landDot + .2, wellAt = landDot + .15, ready = false, finished = false, T0 = null;
+  function grow(d) { return d <= 0 ? 0 : spring(Math.min(1, d / .9)); }
+  function frame(now) {
+    if (T0 === null) T0 = now; var t = (now - T0) / 1000 * SPEED, x = -40, y = G, sx = 1, sy = 1, r = 8;
+    for (var k = 0; k < seq.length; k++) { var s = seq[k]; if (t < s.t) break;
+      var q = Math.min(1, (t - s.t) / s.d);
+      if (s.type === "hop") { x = s.x0 + (s.x1 - s.x0) * ease(q); var top = Math.min(s.y0, s.y1) - s.h; y = (1 - q) * (1 - q) * s.y0 + 2 * (1 - q) * q * (top - (s.y0 + s.y1) / 2 + top) / 1 * .5 + q * q * s.y1;
+        var st = 1 + .22 * Math.sin(Math.PI * q); sx = 1 / st; sy = st; r = 8 + 3 * Math.sin(Math.PI * q); }
+      else { x = LX[s.i]; var g = grow(t - s.t); y = G - (G - TOP[s.i]) * Math.min(1, g); }
+    }
+    /* gepeng saat mendarat (di tanah & di titik akhir) */
+    seq.forEach(function (s) { if (s.type !== "hop") return; var d = t - (s.t + s.d); if (d >= 0 && d < .14) { var w = Math.sin(Math.PI * d / .14); sx = 1 + .5 * w; sy = 1 - .4 * w; } });
+    if (t >= landDot) { x = DOT; y = G; r = 8; var b = t - landDot; if (b > .9) { var bb = ((b - .9) % 1.5) / 1.5; if (bb < .3) { var kk = bb / .3; y = G - 14 * 4 * kk * (1 - kk); } } }
+    ball.setAttribute("cx", x); ball.setAttribute("cy", y + r * (1 - sy)); ball.setAttribute("rx", r * sx); ball.setAttribute("ry", r * sy);
+    LET.forEach(function (g, i) { var d = t - g._t; if (d < 0) return; var s = grow(d);
+      g.style.opacity = 1; g.style.transform = "scale(" + (1 + .2 * (1 - s)) + "," + Math.max(.02, s) + ") rotate(" + (6 * (1 - s) * (i % 2 ? -1 : 1)) + "deg)";
+      [].forEach.call(g.querySelectorAll("path"), function (p, n) { var kn = Math.max(0, Math.min(1, (d - n * .08) / .45)); p.style.strokeDashoffset = p._L * (1 - back(kn)); }); });
+    if (t >= wellAt) { var n = Math.min(8, Math.floor((t - wellAt) / .07) + 1); document.getElementById("well").textContent = "WELLNESS".slice(0, n); if (n === 8) document.getElementById("ldg").classList.add("on"); }
+    if (t > intro + .8) finished = true;
+    if (finished && ready) { document.getElementById("ldg").classList.remove("on"); document.getElementById("ldg").style.opacity = 0; w.classList.add("out"); setTimeout(function () { w.hidden = true; }, 600); return; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  function finishLoading() { ready = true; }
+  window.addEventListener("message", function (e) { var m = e.data; if (m && typeof m === "object" && m.neyma === "ready" && okOrigin(e.origin)) finishLoading(); });
+  f.addEventListener("load", function () { setTimeout(finishLoading, 12000); });
+  setTimeout(function () { if (!ready) document.getElementById("slow").hidden = false; }, 15000);
   f.src = APP_URL;
 
   /* ===== APLIKASI DI HP (PWA) ===== */
